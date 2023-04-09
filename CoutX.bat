@@ -1,12 +1,7 @@
 @echo off
-Mode 52,40
-set Version=1
 
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
-
-::Choice Prompt Setup
-for /f %%A in ('"prompt $H &echo on &for %%B in (1) do rem"') do set BS=%%A
 
 ::NSudo
 if not exist "%tmp%\NSudo.exe" (
@@ -17,8 +12,6 @@ curl -g -k -L -# -o "%tmp%\NSudo.exe" "https://github.com/UnLovedCookie/EchoX/ra
 ::Setup NSudo
 Start "" /D "%tmp%" NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f"
 Start "" /D "%tmp%" NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "sc start "TrustedInstaller"
-
-:Optimize
 
 ::Disable Power Throttling
 call :ControlSet "Control\Session Manager\Power" "CoalescingTimerInterval" "0"
