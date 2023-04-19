@@ -18,9 +18,7 @@ exit /b 2
 if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" (
 exit /b 3
 
-
 ::Admin
-::Get Admin Rights
 rmdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
 mkdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
 if %errorlevel% neq 0 (
@@ -330,6 +328,10 @@ powercfg -setacvalueindex scheme_current SUB_INTSTEER PERPROCLOAD 10000
 )
 ::Disable Frequency Scaling
 powercfg -setacvalueindex scheme_current sub_processor PROCTHROTTLEMIN 100 >nul
+::Don't turn off display when plugged in
+powercfg /change standby-timeout-ac 0
+powercfg /change monitor-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
 ::Apply Changes
 powercfg -setactive scheme_current >nul
 powercfg -changename scheme_current "CoutX Ultimate Performance" "For CoutX Optimizer %Version% (discord.gg/CoutX) By UnLovedCookie" >nul
