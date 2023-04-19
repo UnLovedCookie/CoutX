@@ -1,17 +1,35 @@
 @echo off
+cd tools 2>nul || cd %~dp0\tools
 
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
 
 ::NSudo
-if not exist "%tmp%\NSudo.exe" (
-echo Downloading NSudo [...]
-curl -g -k -L -# -o "%tmp%\NSudo.exe" "https://github.com/UnLovedCookie/EchoX/raw/main/Files/NSudo.exe" >nul 2>&1
+if not exist "NSudo.exe" (
+exit /b 1
+)
+
+::MSR
+if not exist "msr-cmd.exe" (
+exit /b 2
+)
+
+::NVProfileInspector
+if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" (
+exit /b 3
+
+
+::Admin
+::Get Admin Rights
+rmdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
+mkdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
+if %errorlevel% neq 0 (
+exit /b 4
 )
 
 ::Setup NSudo
-Start "" /D "%tmp%" NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f"
-Start "" /D "%tmp%" NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "sc start "TrustedInstaller"
+NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f"
+NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "sc start "TrustedInstaller"
 
 ::Disable Power Throttling
 call :ControlSet "Control\Session Manager\Power" "CoalescingTimerInterval" "0"
@@ -64,7 +82,7 @@ echo Disable Core Isolation
 
 ::Disable Data Execution Prevention
 echo %PROCESSOR_IDENTIFIER% | find /I "Intel" >nul && (
-bcdedit /set nx optout
+bcdedit /set nx optout >nul
 Reg add "HKLM\Software\Policies\Microsoft\Internet Explorer\Main" /v "DEPOff" /t REG_DWORD /d 1 /f >nul
 Reg add "HKLM\Software\Policies\Microsoft\Windows\Explorer" /v "NoDataExecutionPrevention" /t REG_DWORD /d 1 /f >nul
 Reg add "HKLM\Software\Policies\Microsoft\Windows\System" /v "DisableHHDEP" /t REG_DWORD /d 1 /f >nul
@@ -95,8 +113,8 @@ echo Disable Control Flow Guard
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettings" "0"
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverride" "3"
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" "3"
-start "" /D "%tmp%" NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_GenuineIntel.dll"
-start "" /D "%tmp%" NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_AuthenticAMD.dll"
+NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_GenuineIntel.dll"
+NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_AuthenticAMD.dll"
 echo Disable Spectre And Meltdown
 
 ::Disable Network Power Savings and Mitigations
@@ -229,7 +247,7 @@ call :ControlSet "Control\FileSystem" "NtfsDisableLastAccessUpdate" "2147483649"
 ::Opt out of nvidia telemetry
 sc config NvTelemetyContainer start=disabled >nul
 sc stop NvTelemetyContainer >nul
-if exist "C:\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL" (rundll32 "C:\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL",UninstallPackage NvTelemetryContainer)
+if exist "%systmedrive%\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL" (rundll32 "%systmedrive%\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL",UninstallPackage NvTelemetryContainer)
 Reg add "HKLM\Software\NVIDIA Corporation\NvControlPanel2\Client" /v "OptInOrOutPreference" /t REG_DWORD /d 0 /f >nul
 Reg add "HKLM\Software\NVIDIA Corporation\Global\FTS" /v "EnableRID44231" /t REG_DWORD /d 0 /f >nul
 Reg add "HKLM\Software\NVIDIA Corporation\Global\FTS" /v "EnableRID64640" /t REG_DWORD /d 0 /f >nul
@@ -260,8 +278,6 @@ echo Disable HPET
 
 ::Disable NetBios
 call :ControlSet "Services\NetBT\Parameters\Interfaces" "NetbiosOptions" "2"
-sc config lmhosts start=disabled >nul 2>&1
-sc stop lmhosts >nul 2>&1
 rem NetBios is disabled. If it manages to become enabled, protect against NBT-NS poisoning attacks
 call :ControlSet "Services\NetBT\Parameters" "NodeType" "2"
 echo Disable NetBios
@@ -273,8 +289,6 @@ powercfg /delete eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee >nul 2>&1
 powercfg /duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee >nul 2>&1
 powercfg /setactive eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee >nul
 powercfg /delete bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb >nul
-::Disable Frequency Scaling
-powercfg -setacvalueindex scheme_current sub_processor PROCTHROTTLEMIN 100 >nul
 ::Throttle States: OFF
 powercfg -setacvalueindex scheme_current sub_processor THROTTLING 0 >nul
 ::Device Idle Policy: Performance
@@ -318,8 +332,8 @@ powercfg -setacvalueindex scheme_current SUB_INTSTEER PERPROCLOAD 10000
 powercfg -setacvalueindex scheme_current sub_processor PROCTHROTTLEMIN 100 >nul
 ::Apply Changes
 powercfg -setactive scheme_current >nul
-powercfg -changename scheme_current "CoutX Ultimate Performance" "For CoutX Optimizer %Version% (dsc.gg/EchoX) By UnLovedCookie" >nul
-echo EchoX Power Plan
+powercfg -changename scheme_current "CoutX Ultimate Performance" "For CoutX Optimizer %Version% (discord.gg/CoutX) By UnLovedCookie" >nul
+echo CoutX Power Plan
 
 ::Optimize Minecraft Settings
 PowerShell -nop "[System.Net.ServicePointManager]::SecurityProtocol = 'Tls12';iex(irm https://github.com/couleur-tweak-tips/TweakList/raw/master/Master.ps1); Optimize-OptiFine -Preset Lowest"
@@ -329,18 +343,23 @@ for /f "tokens=2 delims==" %%a in ('wmic path Win32_VideoController get VideoPro
 for %%n in (GeForce NVIDIA RTX GTX) do echo %%a | find "%%n" >nul && set GPU=NVIDIA
 )
 Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
-	::Disable Idle
-	::powercfg -setacvalueindex scheme_current sub_processor IDLEDISABLE 1 >nul
 	::Configure C-States
 	powercfg -setacvalueindex scheme_current sub_processor IDLEPROMOTE 100 >nul
 	powercfg -setacvalueindex scheme_current sub_processor IDLEDEMOTE 100 >nul
 	powercfg -setacvalueindex scheme_current sub_processor IDLECHECK 20000 >nul
+	powercfg -setacvalueindex scheme_current sub_processor IDLESCALING 0 >nul
 	::Apply Changes
 	powercfg -setactive scheme_current >nul
 	echo Disable Idle
+	
+	::Disable C1E
+	for /f "tokens=4 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EAX=%%a
+	for /f "tokens=3 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EDX=%%a
+	if "!EAX:~9,1!" equ "b" msr-cmd -a -s write 0x1FC[1] !EDX! !EAX:~0,9!9
+	echo Disable C1E
 
 	::NVCP
-	del /F /Q "%tmp%\nvidiaProfileInspector\EchoProfile.nip"
+	del /F /Q "nvidiaProfileInspector\EchoProfile.nip"
 	::Enable Ultra Low Latency
 	call :NVCP "390467" "2"
 	call :NVCP "277041152" "1"
@@ -357,8 +376,13 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	::Enable All Thread Optimizations
 	call :NVCP "539870258" "31"
 	call :NVCP "544902290" "31"
+	call :NVCP "544902290" "31"
+	::Enable rBAR
+	call :NVCP "983226" "1"
+	call :NVCP "983227" "1"
+	call :NVCP "983295" "AAAAQAAAAAA=" "Binary"
 	call :NVCP "End"
-	if "%GPU%" equ "NVIDIA" start /D "%tmp%\nvidiaProfileInspector\" nvidiaProfileInspector.exe EchoProfile.nip
+	if "%GPU%" equ "NVIDIA" start "" /D "nvidiaProfileInspector" nvidiaProfileInspector.exe EchoProfile.nip
 	echo NVCP Settings
 
 	::Grab iGPU Registry Key
@@ -391,12 +415,6 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	echo Enable KBoost
 	)
 
-	::Avoid using uncontiguous low-memory. Boosts memory performance & microstuttering.
-	rem Can freeze the system on unstable memory OC
-	bcdedit /set firstmegabytepolicy UseAll >nul
-	bcdedit /set avoidlowmemory 0x8000000 >nul
-	bcdedit /set nolowmem Yes >nul
-
 	::Disable System Clock
 	bcdedit /set disabledynamictick yes >nul 2>&1
 	bcdedit /deletevalue useplatformclock >nul 2>&1
@@ -406,12 +424,19 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	)
 ) || Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x0" >nul && (
 	Reg delete HKCU\Software\CoutX /v PerfTweaks /f >nul
+	
+	::Enable C1E
+	for /f "tokens=4 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EAX=%%a
+	for /f "tokens=3 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EDX=%%a
+	if "!EAX:~9,1!" equ "9" msr-cmd -a -s write 0x1FC[1] !EDX! !EAX:~0,9!b
+	echo Enable C1E
+	
 	::NVCP
-	del /F /Q "%tmp%\nvidiaProfileInspector\EchoProfile.nip"
+	del /F /Q "nvidiaProfileInspector\EchoProfile.nip"
 	::Prefer Optimal Performance
 	call :NVCP "274197361" "5"
 	call :NVCP "End"
-	if "%GPU%" equ "NVIDIA" start /D "%tmp%\nvidiaProfileInspector\" nvidiaProfileInspector.exe EchoProfile.nip
+	if "%GPU%" equ "NVIDIA" start "" /D "nvidiaProfileInspector" nvidiaProfileInspector.exe EchoProfile.nip
 	echo Reset NVCP Settings
 
 	for /f %%i in ('Reg query "HKLM\System\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" /t REG_SZ /s /e /f "Intel" ^| findstr "HKEY"') do (
@@ -428,11 +453,6 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	Call :DelControlSet "%%a" "PerfLevelSrc"
 	echo Reset KBoost
 	)
-
-	::Avoid using uncontiguous low-memory.
-	bcdedit /deletevalue firstmegabytepolicy
-	bcdedit /deletevalue avoidlowmemory
-	bcdedit /deletevalue nolowmem
 
 	::System Clock
 	bcdedit /deletevalue useplatformclock >nul 2>&1
@@ -461,8 +481,8 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	echo Disable Large System Cache
 
 	::Disable Prefetch
-	sc config "SysMain" start=disabled
-	sc stop "SysMain"
+	sc config "SysMain" start=disabled >nul
+	sc stop "SysMain" >nul
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnablePrefetcher" "0"
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableSuperfetch" "0"
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableBoottrace" "0"
@@ -477,7 +497,8 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	echo Disable Write Combining
 ) || Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x0" >nul && (
 	Reg delete HKCU\Software\CoutX /v ExTweaks /f >nul
-	sc config "SysMain" start=auto
+	sc config "SysMain" start=auto >nul
+	sc start "SysMain" >nul
 	call :DelControlSet "Control\Session Manager\Memory Management" "DisablePagingExecutive"
 	call :DelControlSet "Control\Session Manager\Memory Management" "DisablePageCombining"
 	call :DelControlSet "Control\Session Manager\Memory Management" "LargeSystemCache"
@@ -489,9 +510,15 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	call :DelControlSet "Control" "SvcHostSplitThresholdInKB"
 )
 
-echo msgbox "Done^! Restart your computer to fully apply^.",vbInformation + vbSystemModal,"CoutX" >"%tmp%\tmp.vbs"
-start "" wscript "%tmp%\tmp.vbs"
-exit /b
+::End
+taskkill /f /im regedit.exe
+taskkill /f /im nsudo.exe
+taskkill /f /im msr-cmd.exe
+taskkill /f /im fsutil.exe
+exit 0
+
+::echo msgbox "Done^! Restart your computer to fully apply^.",vbInformation + vbSystemModal,"CoutX" >"%tmp%\tmp.vbs"
+::start "" wscript "%tmp%\tmp.vbs"
 ::Release the current IP address obtains a new one.
 echo ipconfig /release >"%tmp%\RefreshNet.bat"
 echo ipconfig /renew >>"%tmp%\RefreshNet.bat"
@@ -529,21 +556,16 @@ Reg delete "HKLM\System\ControlSet002\%~1" /v "%~2" /f >nul 2>&1
 goto:EOF
 
 :NVCP
-if not exist "%tmp%\nvidiaProfileInspector\nvidiaProfileInspector.exe" (
-curl -g -k -L -# -o "%tmp%\nvidiaProfileInspector.zip" "https://github.com/Orbmu2k/nvidiaProfileInspector/releases/latest/download/nvidiaProfileInspector.zip" >nul 2>nul
-powershell -NoProfile Expand-Archive '%tmp%\nvidiaProfileInspector.zip' -DestinationPath '%tmp%\nvidiaProfileInspector\' >nul 2>nul
-del /F /Q "%tmp%\nvidiaProfileInspector.zip"
-)
 
-if not exist "%tmp%\nvidiaProfileInspector\EchoProfile.nip" (
-echo ^<?xml version="1.0" encoding="utf-16"?^> > "%tmp%\nvidiaProfileInspector\EchoProfile.nip"
+if not exist "nvidiaProfileInspector\EchoProfile.nip" (
+echo ^<?xml version="1.0" encoding="utf-16"?^> > "nvidiaProfileInspector\EchoProfile.nip"
 for %%a in (
 "<ArrayOfProfile>"
 "  <Profile>"
 "    <ProfileName>Base Profile</ProfileName>"
 "    <Executeables />"
 "    <Settings>"
-) do (echo %%~a) >> "%tmp%\nvidiaProfileInspector\EchoProfile.nip"
+) do (echo %%~a) >> "nvidiaProfileInspector\EchoProfile.nip"
 )
 
 if "%~1" equ "End" (
@@ -551,15 +573,18 @@ for %%a in (
 "    </Settings>"
 "  </Profile>"
 "</ArrayOfProfile>"
-) do (echo %%~a) >> "%tmp%\nvidiaProfileInspector\EchoProfile.nip"
+) do (echo %%~a) >> "nvidiaProfileInspector\EchoProfile.nip"
 goto:EOF
 )
+
+set Type=%~3
+if not defined Type set Type=Dword
 
 for %%a in (
 "      <ProfileSetting>"
 "        <SettingID>%~1</SettingID>"
 "        <SettingValue>%~2</SettingValue>"
-"        <ValueType>Dword</ValueType>"
+"        <ValueType>%Type%</ValueType>"
 "      </ProfileSetting>"
-) do (echo %%~a) >> "%tmp%\nvidiaProfileInspector\EchoProfile.nip"
+) do (echo %%~a) >> "nvidiaProfileInspector\EchoProfile.nip"
 goto:EOF
