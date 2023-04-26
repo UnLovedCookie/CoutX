@@ -61,6 +61,10 @@ Reg add "HKCU\System\GameConfigStore" /v "GameDVR_DXGIHonorFSEWindowsCompatible"
 Reg add "HKCU\System\GameConfigStore" /v "GameDVR_EFSEFeatureFlags" /t REG_DWORD /d "0" /f >nul
 echo Enable FSE
 
+::Disable FTH
+reg add "HKLM\Software\Microsoft\FTH" /v "Enabled" /t Reg_DWORD /d "0" /f
+echo Disable FTH
+	
 ::Disable Process Mitigations
 Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v MitigationOptions /t REG_BINARY /d 222222222222222222222222222222222222222222222222 /f >nul
 Reg add "HKLM\System\ControlSet001\Control\Session Manager\kernel" /v MitigationOptions /t REG_BINARY /d 222222222222222222222222222222222222222222222222 /f >nul
@@ -116,17 +120,16 @@ NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System3
 echo Disable Spectre And Meltdown
 
 ::Disable Network Power Savings and Mitigations
-Reg add "HKLM\SYSTEM\CurrentControlSet\Control\Nsi\{eb004a03-9b1a-11d4-9123-0050047759bc}\27" /v "06000000" /t REG_BINARY /d "04000000ffffffff" /f >nul
 powershell -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -Command ^
 $ErrorActionPreference = 'SilentlyContinue';^
 Disable-NetAdapterPowerManagement -Name "*";^
 Get-NetAdapter -IncludeHidden ^| Set-NetIPInterface -WeakHostSend Enabled -WeakHostReceive Enabled;^
 Set-NetOffloadGlobalSetting -PacketCoalescingFilter Disabled -Chimney Disabled;^
-Set-NetTCPSetting -SettingName "InternetCustom" -MemoryPressureProtection Disabled
+Set-NetTCPSetting -SettingName "Internet" -MemoryPressureProtection Disabled
 echo Disable Network Power Savings And Mitigations
 
 ::Set Congestion Provider To BBR2
-netsh int tcp set supplemental template=InternetCustom congestionprovider=bbr2 >nul
+netsh int tcp set supplemental template=Internet congestionprovider=bbr2 >nul
 echo Set Congestion Provider To BBR2
 
 ::MMCSS
@@ -247,6 +250,7 @@ sc config NvTelemetyContainer start=disabled >nul
 sc stop NvTelemetyContainer >nul
 if exist "%systmedrive%\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL" (rundll32 "%systmedrive%\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL",UninstallPackage NvTelemetryContainer)
 Reg add "HKLM\Software\NVIDIA Corporation\NvControlPanel2\Client" /v "OptInOrOutPreference" /t REG_DWORD /d 0 /f >nul
+Reg add "HKLM\System\CurrentControlSet\Services\nvlddmkm\Global\Startup" /v "SendTelemetryData" /t REG_DWORD /d "0" /f
 Reg add "HKLM\Software\NVIDIA Corporation\Global\FTS" /v "EnableRID44231" /t REG_DWORD /d 0 /f >nul
 Reg add "HKLM\Software\NVIDIA Corporation\Global\FTS" /v "EnableRID64640" /t REG_DWORD /d 0 /f >nul
 Reg add "HKLM\Software\NVIDIA Corporation\Global\FTS" /v "EnableRID66610" /t REG_DWORD /d 0 /f >nul
@@ -256,6 +260,13 @@ schtasks /change /disable /tn "NvTmRep_CrashReport2_{B2FE1952-0186-46C3-BAEC-A80
 schtasks /change /disable /tn "NvTmRep_CrashReport3_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}" >nul 2>&1
 schtasks /change /disable /tn "NvTmRep_CrashReport4_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}" >nul 2>&1
 echo Disable Nvidia Telemetry
+
+::Grab Nvidia Graphics Card Registry Key
+for /f %%a in ('Reg query "HKLM\System\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" /t REG_SZ /s /e /f "NVIDIA" ^| findstr "HKEY"') do (
+::Disable HDCP
+call :ControlSet "%%a" "RMHdcpKeyglobZero" "1"
+echo Disable HDCP
+)
 
 ::Fix CPU Stock Speed
 call :ControlSet "Services\IntelPPM" "Start" "3"
@@ -424,6 +435,12 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	if !VAR! geq 19042 (bcdedit /deletevalue useplatformtick >nul 2>&1
 	) else (bcdedit /set useplatformtick yes >nul 2>&1
 	)
+	
+	::Timer Resolution
+	Call :ControlSet "Control\Session Manager\kernel" "GlobalTimerResolutionRequests" "1"
+	Copy /Y SetTimerResolution.exe %systemdrive%\SetTimerResolution.exe >nul 2>&1
+	Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /V "SetTimerResolution" /t REG_SZ /F /D "%systemdrive%\SetTimerResolution.exe --resolution 5070 --no-console" >nul 2>&1
+	tasklist | find /I "SetTimerResolution" >nul || start "SetTimerResolution.exe" %systemdrive%\SetTimerResolution.exe --resolution 5070 --no-console
 ) || Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x0" >nul && (
 	Reg delete HKCU\Software\CoutX /v PerfTweaks /f >nul
 	
@@ -460,6 +477,11 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	bcdedit /deletevalue useplatformclock >nul 2>&1
 	bcdedit /deletevalue useplatformtick >nul 2>&1
 	bcdedit /deletevalue disabledynamictick >nul 2>&1
+	
+	::Timer Resolution
+	taskkill /f /im SetTimerResolution.exe >nul 2>&1
+	Reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "SetTimerResolution" /f >nul 2>&1
+	del /f “%systemdrive%\SetTimerResolution.exe” 2>nul
 )
 
 Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
