@@ -4,8 +4,8 @@ cd %~dp0
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
 
-::NSudo
-if not exist "NSudo.exe" exit /b 1
+::MinSudo
+if not exist "MinSudo.exe" exit /b 1
 
 ::MSR
 if not exist "msr-cmd.exe" exit /b 2
@@ -18,9 +18,9 @@ rmdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
 mkdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
 if "%errorlevel%" neq "0" exit /b 4
 
-::Setup NSudo
-NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f"
-NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "sc start "TrustedInstaller"
+::Setup MinSudo
+MinSudo.exe --System Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f >nul
+MinSudo.exe --System sc start "TrustedInstaller" >nul
 
 ::Disable Power Throttling
 call :ControlSet "Control\Session Manager\Power" "CoalescingTimerInterval" "0"
@@ -55,7 +55,7 @@ Reg add "HKCU\System\GameConfigStore" /v "GameDVR_EFSEFeatureFlags" /t REG_DWORD
 echo Enable FSE
 
 ::Disable FTH
-reg add "HKLM\Software\Microsoft\FTH" /v "Enabled" /t Reg_DWORD /d "0" /f
+reg add "HKLM\Software\Microsoft\FTH" /v "Enabled" /t Reg_DWORD /d "0" /f >nul
 echo Disable FTH
 	
 ::Disable Process Mitigations
@@ -110,8 +110,8 @@ call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOve
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" "3"
 takeown /f "C:\Windows\System32\mcupdate_GenuineIntel.dll" /r /d y >nul 2>&1
 takeown /f "C:\Windows\System32\mcupdate_AuthenticAMD.dll" /r /d y >nul 2>&1
-NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_GenuineIntel.dll"
-NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_AuthenticAMD.dll"
+MinSudo.exe --TrustedInstaller --Privileged cmd /c "del /f /q %WinDir%\System32\mcupdate_GenuineIntel.dll" >nul
+MinSudo.exe --TrustedInstaller --Privileged cmd /c "del /f /q %WinDir%\System32\mcupdate_AuthenticAMD.dll" >nul
 echo Disable Spectre And Meltdown
 
 ::Disable Network Power Savings and Mitigations
@@ -128,16 +128,16 @@ netsh int tcp set supplemental template=Internet congestionprovider=bbr2 >nul
 echo Set Congestion Provider To BBR2
 
 ::Enable QoS Policy Outside Domain Networks
-Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\QoS" /v "Do not use NLA" /t REG_DWORD /d "1" /f >>%log% 2>>%error%
+Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\QoS" /v "Do not use NLA" /t REG_DWORD /d "1" /f >nul
 
 ::https://admx.help/?Category=Windows_10_2016&Policy=Microsoft.Policies.QualityofService::QosTimerResolution
-Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "TimerResolution" /t REG_DWORD /d "1" /f >>%log% 2>>%error%
-Reg add "HKLM\System\CurrentControlSet\Services\AFD\Parameters" /v "DoNotHoldNicBuffers" /t REG_DWORD /d "1" /f >>%log% 2>>%error%
+Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "TimerResolution" /t REG_DWORD /d "1" /f >nul
+Reg add "HKLM\System\CurrentControlSet\Services\AFD\Parameters" /v "DoNotHoldNicBuffers" /t REG_DWORD /d "1" /f >nul
 echo Qos TimerResolution
 
 ::Disable limiting bandwith
 ::https://admx.help/?Category=Windows_10_2016&Policy=Microsoft.Policies.QualityofService::QosNonBestEffortLimit
-Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "NonBestEffortLimit" /t REG_DWORD /d "0" /f >>%log% 2>>%error%
+Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "NonBestEffortLimit" /t REG_DWORD /d "0" /f >nul
 echo Remove Limiting Bandwidth
 
 ::MMCSS
@@ -558,7 +558,7 @@ gpupdate /force >nul
 (taskkill /f /im explorer.exe && start explorer.exe) >nul
 ::End
 taskkill /f /im regedit.exe
-taskkill /f /im nsudo.exe
+taskkill /f /im MinSudo.exe
 taskkill /f /im msr-cmd.exe
 taskkill /f /im fsutil.exe
 exit 0
