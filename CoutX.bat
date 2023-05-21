@@ -1,29 +1,22 @@
 @echo off
-cd tools 2>nul || cd %~dp0\tools
+cd %~dp0
 
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
 
 ::NSudo
-if not exist "NSudo.exe" (
-exit /b 1
-)
+if not exist "NSudo.exe" exit /b 1
 
 ::MSR
-if not exist "msr-cmd.exe" (
-exit /b 2
-)
+if not exist "msr-cmd.exe" exit /b 2
 
 ::NVProfileInspector
-if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" (
-exit /b 3
+if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" exit /b 3
 
 ::Admin
 rmdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
 mkdir %SystemDrive%\Windows\system32\adminrightstest >nul 2>&1
-if %errorlevel% neq 0 (
-exit /b 4
-)
+if "%errorlevel%" neq "0" exit /b 4
 
 ::Setup NSudo
 NSudo.exe -U:S -ShowWindowMode:Hide cmd /c "Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f"
@@ -115,6 +108,8 @@ echo Disable Control Flow Guard
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettings" "0"
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverride" "3"
 call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" "3"
+takeown /f "C:\Windows\System32\mcupdate_GenuineIntel.dll" /r /d y >nul 2>&1
+takeown /f "C:\Windows\System32\mcupdate_AuthenticAMD.dll" /r /d y >nul 2>&1
 NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_GenuineIntel.dll"
 NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "del /f /q %WinDir%\System32\mcupdate_AuthenticAMD.dll"
 echo Disable Spectre And Meltdown
@@ -425,6 +420,10 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	Call :ControlSet "%%a" "PowerMizerLevel" "1"
 	Call :ControlSet "%%a" "PowerMizerLevelAC" "1"
 	Call :ControlSet "%%a" "PerfLevelSrc" "8738"
+	::Disable Core Downclock
+	Call :ControlSet "%%a" "EnableCoreSlowdown" "0"
+	Call :ControlSet "%%a" "EnableMClkSlowdown" "0"
+	Call :ControlSet "%%a" "EnableNVClkSlowdown" "0"
 	echo Enable KBoost
 	)
 
@@ -471,6 +470,10 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	Call :DelControlSet "%%a" "PowerMizerLevelAC"
 	Call :DelControlSet "%%a" "PerfLevelSrc"
 	echo Reset KBoost
+	Call :DelControlSet "%%a" "EnableCoreSlowdown"
+	Call :DelControlSet "%%a" "EnableMClkSlowdown"
+	Call :DelControlSet "%%a" "EnableNVClkSlowdown"
+	echo Reset Core Downclock
 	)
 
 	::System Clock
@@ -534,24 +537,18 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	call :DelControlSet "Control" "SvcHostSplitThresholdInKB"
 )
 
+::Flush DNS
+ipconfig /flushdns >nul
+::Update Group Policy 
+gpupdate /force >nul
+::Restart Explorer
+(taskkill /f /im explorer.exe && start explorer.exe) >nul
 ::End
 taskkill /f /im regedit.exe
 taskkill /f /im nsudo.exe
 taskkill /f /im msr-cmd.exe
 taskkill /f /im fsutil.exe
 exit 0
-
-::echo msgbox "Done^! Restart your computer to fully apply^.",vbInformation + vbSystemModal,"CoutX" >"%tmp%\tmp.vbs"
-::start "" wscript "%tmp%\tmp.vbs"
-::Release the current IP address obtains a new one.
-echo ipconfig /release >"%tmp%\RefreshNet.bat"
-echo ipconfig /renew >>"%tmp%\RefreshNet.bat"
-::Flush the DNS and Begin manual dynamic registration for DNS names.
-echo ipconfig /flushdns >>"%tmp%\RefreshNet.bat"
-echo ipconfig /registerdns >>"%tmp%\RefreshNet.bat"
-start "" /D "%tmp%" NSudo.exe -U:T -P:E -M:S -ShowWindowMode:Hide cmd /c "%tmp%\RefreshNet.bat"
-::Restart Explorer
->nul 2>&1 taskkill /f /im explorer.exe && start "" explorer.exe
 
 :ControlSet
 set ControlSet=%1
