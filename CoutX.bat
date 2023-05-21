@@ -1,4 +1,3 @@
-::1.2.2
 @echo off
 cd %~dp0
 
@@ -127,6 +126,19 @@ echo Disable Network Power Savings And Mitigations
 ::Set Congestion Provider To BBR2
 netsh int tcp set supplemental template=Internet congestionprovider=bbr2 >nul
 echo Set Congestion Provider To BBR2
+
+::Enable QoS Policy Outside Domain Networks
+Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\QoS" /v "Do not use NLA" /t REG_DWORD /d "1" /f >>%log% 2>>%error%
+
+::https://admx.help/?Category=Windows_10_2016&Policy=Microsoft.Policies.QualityofService::QosTimerResolution
+Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "TimerResolution" /t REG_DWORD /d "1" /f >>%log% 2>>%error%
+Reg add "HKLM\System\CurrentControlSet\Services\AFD\Parameters" /v "DoNotHoldNicBuffers" /t REG_DWORD /d "1" /f >>%log% 2>>%error%
+echo Qos TimerResolution
+
+::Disable limiting bandwith
+::https://admx.help/?Category=Windows_10_2016&Policy=Microsoft.Policies.QualityofService::QosNonBestEffortLimit
+Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "NonBestEffortLimit" /t REG_DWORD /d "0" /f >>%log% 2>>%error%
+echo Remove Limiting Bandwidth
 
 ::MMCSS
 >"%tmp%\tmp.vbs" echo a = msgbox("CoutX detected that MMCSS has been disabled. Would you like to re-enable it?",vbYesNo+vbQuestion + vbSystemModal,"CoutX") 
