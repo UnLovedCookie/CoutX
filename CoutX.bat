@@ -22,12 +22,10 @@ if "%errorlevel%" neq "0" exit /b 4
 MinSudo.exe --System Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f >nul
 MinSudo.exe --System sc start "TrustedInstaller" >nul
 
-::Disable Power Throttling
-call :ControlSet "Control\Session Manager\Power" "CoalescingTimerInterval" "0"
-call :ControlSet "Control\Power" "EnergyEstimationEnabled" "0"
-call :ControlSet "Control\Power" "EventProcessorEnabled" "0"
-call :ControlSet "Control\Power\PowerThrottling" "PowerThrottlingOff" "1"
-echo Disable Power Throttling
+::Disable CSRSS mitigations
+Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe" /v MitigationAuditOptions /t REG_BINARY /d "222222222222222222222222222222222222222222222222" /f >nul
+Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe" /v MitigationOptions /t REG_BINARY /d "222222222222222222222222222222222222222222222222" /f >nul
+echo Disable CSRSS mitigations
 
 ::Disable USB Power Savings
 for /f "tokens=*" %%a in ('Reg query "HKLM\System\CurrentControlSet\Enum" /s /f "StorPort" 2^>nul ^| findstr "StorPort"') do call :ControlSet "%%a" "EnableIdlePowerManagement" "0"
@@ -41,27 +39,14 @@ call :ControlSet "Enum\%%a\Device Parameters" "SelectiveSuspendOn" "0"
 call :ControlSet "Enum\%%a\Device Parameters" "D3ColdSupported" "0"
 )
 echo Disable USB Power Savings
-
-::Enable FSE
-Reg add "HKCU\System\GameConfigStore" /v "GameDVR_Enabled" /t REG_DWORD /d "0" /f >nul
-Reg add "HKCU\System\GameConfigStore" /v "AllowGameDVR" /t REG_DWORD /d "0" /f >nul
-Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\GameDVR" /v "AppCaptureEnabled" /t REG_DWORD /d "0" /f >nul
-Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\GameDVR" /v "HistoricalCaptureEnabled" /t REG_DWORD /d "0" /f >nul
-Reg add "HKCU\System\GameConfigStore" /v "GameDVR_FSEBehavior" /t REG_DWORD /d "2" /f >nul
-Reg add "HKCU\System\GameConfigStore" /v "GameDVR_FSEBehaviorMode" /t REG_DWORD /d "2" /f >nul
-Reg add "HKCU\System\GameConfigStore" /v "GameDVR_HonorUserFSEBehaviorMode" /t REG_DWORD /d "1" /f >nul
-Reg add "HKCU\System\GameConfigStore" /v "GameDVR_DXGIHonorFSEWindowsCompatible" /t REG_DWORD /d "1" /f >nul
-Reg add "HKCU\System\GameConfigStore" /v "GameDVR_EFSEFeatureFlags" /t REG_DWORD /d "0" /f >nul
-echo Enable FSE
-
-::Disable FTH
-reg add "HKLM\Software\Microsoft\FTH" /v "Enabled" /t Reg_DWORD /d "0" /f >nul
-echo Disable FTH
 	
-::Disable Process Mitigations
+::Disable Kernel Mitigations
 Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v MitigationOptions /t REG_BINARY /d 222222222222222222222222222222222222222222222222 /f >nul
 Reg add "HKLM\System\ControlSet001\Control\Session Manager\kernel" /v MitigationOptions /t REG_BINARY /d 222222222222222222222222222222222222222222222222 /f >nul
 Reg add "HKLM\System\ControlSet002\Control\Session Manager\kernel" /v MitigationOptions /t REG_BINARY /d 222222222222222222222222222222222222222222222222 /f >nul
+echo Disable Kernel Mitigations
+
+::Disable Process Mitigations
 PowerShell "ForEach($v in (Get-Command -Name \"Set-ProcessMitigation\").Parameters[\"Disable\"].Attributes.ValidValues){Set-ProcessMitigation -System -Disable $v.ToString() -ErrorAction SilentlyContinue}" >nul
 echo Disable Process Mitigations
 
@@ -127,19 +112,6 @@ echo Disable Network Power Savings And Mitigations
 netsh int tcp set supplemental template=Internet congestionprovider=bbr2 >nul
 echo Set Congestion Provider To BBR2
 
-::Enable QoS Policy Outside Domain Networks
-Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\QoS" /v "Do not use NLA" /t REG_DWORD /d "1" /f >nul
-
-::https://admx.help/?Category=Windows_10_2016&Policy=Microsoft.Policies.QualityofService::QosTimerResolution
-Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "TimerResolution" /t REG_DWORD /d "1" /f >nul
-Reg add "HKLM\System\CurrentControlSet\Services\AFD\Parameters" /v "DoNotHoldNicBuffers" /t REG_DWORD /d "1" /f >nul
-echo Qos TimerResolution
-
-::Disable limiting bandwith
-::https://admx.help/?Category=Windows_10_2016&Policy=Microsoft.Policies.QualityofService::QosNonBestEffortLimit
-Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "NonBestEffortLimit" /t REG_DWORD /d "0" /f >nul
-echo Remove Limiting Bandwidth
-
 ::MMCSS
 >"%tmp%\tmp.vbs" echo a = msgbox("CoutX detected that MMCSS has been disabled. Would you like to re-enable it?",vbYesNo+vbQuestion + vbSystemModal,"CoutX") 
 >>"%tmp%\tmp.vbs" echo if a = 6 then
@@ -148,15 +120,10 @@ echo Remove Limiting Bandwidth
 >>"%tmp%\tmp.vbs" echo CreateObject("WScript.Shell").Run "sc start MMCSS", 0, True
 >>"%tmp%\tmp.vbs" echo end if
 sc query MMCSS | find "STOPPED" >nul && start "CoutX" wscript "%tmp%\tmp.vbs"
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v "NetworkThrottlingIndex" /t REG_DWORD /d "10" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v "SystemResponsiveness" /t REG_DWORD /d "10" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v "LazyModeTimeout" /t REG_DWORD /d "10000" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v "NoLazyMode" /t REG_DWORD /d "1" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" /v "AlwaysOn" /t REG_DWORD /d "0" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" /v "Latency Sensitive" /t REG_SZ /d "True" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" /v "Scheduling Category" /t REG_SZ /d "High" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" /v "SFIO Priority" /t REG_SZ /d "High" /f >nul
-Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" /v "Priority" /t REG_DWORD /d "8" /f >nul
+Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" / v "Latency Sensitive" / t REG_SZ / d "True" / f > nul
+Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" / v "Scheduling Category" / t REG_SZ / d "High" / f > nul
+Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" / v "SFIO Priority" / t REG_SZ / d "High" / f > nul
+Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" / v "Priority" / t REG_DWORD / d "8" / f > nul
 echo Configure MMCSS
 
 ::https://docs.microsoft.com/en-us/windows-hardware/drivers/display/gdi-hardware-acceleration
@@ -168,8 +135,6 @@ echo Enable Hardware Accelerated Scheduling
 ::Enable MSI Mode
 for /f %%a in ('wmic path Win32_VideoController get PNPDeviceID ^| find "PCI\VEN_"') do call :ControlSet "Enum\%%a\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties" "MSISupported" "1"
 echo Enable MSI Mode on GPU
-for /f %%a in ('wmic path win32_NetworkAdapter get PNPDeviceID ^| find "PCI\VEN_"') do call :ControlSet "Enum\%%a\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties" "MSISupported" "1"
-echo Enable MSI Mode on Net
 for /f %%a in ('wmic path Win32_USBController get PNPDeviceID ^| find "PCI\VEN_"') do call :ControlSet "Enum\%%a\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties" "MSISupported" "1"
 echo Enable MSI Mode on USB
 
@@ -450,9 +415,10 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	
 	::Timer Resolution
 	Call :ControlSet "Control\Session Manager\kernel" "GlobalTimerResolutionRequests" "1"
+	taskkill /f /im SetTimerResolution.exe >nul 2>&1
 	Copy /Y SetTimerResolution.exe %systemdrive%\SetTimerResolution.exe >nul 2>&1
-	Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /V "SetTimerResolution" /t REG_SZ /F /D "%systemdrive%\SetTimerResolution.exe --resolution 5070 --no-console" >nul 2>&1
-	tasklist | find /I "SetTimerResolution" >nul || start "SetTimerResolution.exe" %systemdrive%\SetTimerResolution.exe --resolution 5070 --no-console
+	%systemdrive%\SetTimerResolution.exe -Install >nul 2>&1
+	net start STR >nul 2>&1
 ) || Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x0" >nul && (
 	Reg delete HKCU\Software\CoutX /v PerfTweaks /f >nul
 	
@@ -495,9 +461,9 @@ Reg query HKCU\Software\CoutX /v PerfTweaks 2>nul | find "0x1" >nul && (
 	bcdedit /deletevalue disabledynamictick >nul 2>&1
 	
 	::Timer Resolution
-	taskkill /f /im SetTimerResolution.exe >nul 2>&1
-	Reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "SetTimerResolution" /f >nul 2>&1
-	del /f “%systemdrive%\SetTimerResolution.exe” 2>nul
+	net stop STR >nul 2>&1
+	%systemdrive%\SetTimerResolution.exe -Uninstall >nul 2>&1
+	del /f "%systemdrive%\SetTimerResolution.exe" 2>nul
 )
 
 Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
