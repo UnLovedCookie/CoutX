@@ -25,6 +25,43 @@ MinSudo.exe --NoLogo --System sc config "TrustedInstaller" start=demand
 MinSudo.exe --NoLogo --System sc start "TrustedInstaller"
 )
 
+::Animations
+Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v "VisualFXSetting" /t REG_DWORD /d "3" /f >nul
+Reg add "HKCU\Control Panel\Desktop" /f /v "UserPreferencesMask" /t REG_BINARY /d "9012078012000000" >nul
+Reg add "HKCU\Control Panel\Desktop" /v "DragFullWindows" /t REG_SZ /d "1" /f >nul
+Reg add "HKCU\Control Panel\Desktop" /v "FontSmoothing" /t REG_SZ /d "2" /f >nul
+Reg add "HKCU\Control Panel\Desktop\WindowMetrics" /v "MinAnimate" /t REG_SZ /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\DWM" /v "EnableAeroPeek" /t REG_DWORD /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\DWM" /v "AlwaysHibernateThumbnails" /t REG_DWORD /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\DWM" /v "ListviewShadow" /t REG_DWORD /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "IconsOnly" /t REG_DWORD /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "ListviewAlphaSelect" /t REG_DWORD /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "TaskbarAnimations" /t REG_DWORD /d "0" /f >nul
+Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" /v "ListviewShadow" /t REG_DWORD /d "0" /f >nul
+echo Animations
+
+::Quickly kill apps during shutdown
+Reg add "HKCU\Control Panel\Desktop" /v "WaitToKillAppTimeout" /t REG_SZ /d "2000" /f >nul
+::Quickly end services at shutdown
+Reg add "HKLM\System\CurrentControlSet\Control" /v "WaitToKillServiceTimeout" /t REG_SZ /d "2000" /f >nul
+::Kill apps at shutdown
+Reg add "HKCU\Control Panel\Desktop" /v "AutoEndTasks" /t REG_SZ /d "1" /f >nul
+echo Quick shutdown
+
+::Quickly kill non-respondive apps
+Reg add "HKCU\Control Panel\Desktop" /v "HungAppTimeout" /t REG_SZ /d "1000" /f >nul
+::Quickly show menus
+Reg add "HKCU\Control Panel\Desktop" /v "MenuShowDelay" /t REG_SZ /d "20" /f >nul
+echo Speed up windows
+
+::Quick Boot
+Reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" /v "StartupDelayInMSec" /t REG_SZ /d "0" /f >nul
+if "%duelboot%" equ "no" (bcdedit /timeout 0) >nul
+bcdedit /set bootuxdisabled On >nul
+bcdedit /set bootmenupolicy Legacy >nul
+bcdedit /set quietboot yes >nul
+echo Quick boot
+
 ::Disable USB Power Savings
 for /f "tokens=*" %%a in ('Reg query "HKLM\System\CurrentControlSet\Enum" /s /f "StorPort" 2^>nul ^| findstr "StorPort"') do call :ControlSet "%%a" "EnableIdlePowerManagement" "0"
 for /f %%a in ('wmic PATH Win32_PnPEntity GET DeviceID ^| find "USB\VID_"') do (
@@ -343,9 +380,10 @@ echo %PROCESSOR_IDENTIFIER% | find /I "Intel" >nul && powercfg -setacvalueindex 
 ::TDP Level High
 call :ControlSet "Control\Power\PowerSettings\48df9d60-4f68-11dc-8314-0800200c9a66\07029cd8-4664-4698-95d8-43b2e9666596" "ACSettingIndex" "0"
 ::Enable Hardware P-states
+call :ControlSet "Control\Power\PowerSettings\54533251-82be-4824-96c1-47b60b740d00\4d2b0152-7d5c-498b-88e2-34345392a2c5" "ValueMax" "200000"
 powercfg -setacvalueindex scheme_current sub_processor PERFAUTONOMOUS 1 >nul
 powercfg -setacvalueindex scheme_current sub_processor PERFAUTONOMOUSWINDOW 20000 >nul
-powercfg -setacvalueindex scheme_current sub_processor PERFCHECK 20 >nul
+powercfg -setacvalueindex scheme_current sub_processor PERFCHECK 100000 >nul
 ::Dont restrict core boost
 powercfg -setacvalueindex scheme_current sub_processor PERFEPP 0 >nul
 ::Enable Turbo Boost
@@ -357,7 +395,7 @@ powercfg -setacvalueindex scheme_current SUB_SLEEP ALLOWSTANDBY 0 >nul
 powercfg -setacvalueindex scheme_current SUB_SLEEP HYBRIDSLEEP 0 >nul
 ::Disable Core Parking
 echo %PROCESSOR_IDENTIFIER% | find /I "Intel" >nul && (
-call :ControlSet "Control\Power\PowerSettings\54533251-82be-4824-96c1-47b60b740d00\0cc5b647-c1df-4637-891a-dec35c318583" "ValueMax" "64"
+call :ControlSet "Control\Power\PowerSettings\54533251-82be-4824-96c1-47b60b740d00\0cc5b647-c1df-4637-891a-dec35c318583" "ValueMax" "100"
 powercfg -setacvalueindex scheme_current sub_processor CPMINCORES 100 >nul 2>&1
 ) || (
 powercfg -setacvalueindex scheme_current SUB_INTSTEER UNPARKTIME 0
@@ -415,7 +453,7 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	
 	::Disable TsX
 	call :ControlSet "Control\Session Manager\kernel" "DisableTsx" "1"
-	echo Disable TsX	
+	echo Disable TsX
 	
 	::Disable CPU Virtualization
 	Reg add "HKLM\Software\Policies\Microsoft\Windows\DeviceGuard" /v "EnableVirtualizationBasedSecurity" /t REG_DWORD /d "0" /f >nul
@@ -458,7 +496,7 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	echo Disable Control Flow Guard
 	
 	::Disable Spectre And Meltdown
-	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettings" "0"
+	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettings" "3"
 	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverride" "3"
 	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" "3"
 	takeown /f "C:\Windows\System32\mcupdate_GenuineIntel.dll" /r /d y >nul 2>&1
@@ -466,6 +504,10 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	if exist "%WinDir%\System32\mcupdate_GenuineIntel.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_GenuineIntel.dll mcupdate_GenuineIntel.dll.old"
 	if exist "%WinDir%\System32\mcupdate_AuthenticAMD.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_AuthenticAMD.dll mcupdate_AuthenticAMD.dll.old"
 	echo Disable Spectre And Meltdown
+	
+	::Disable ITLB Multi-hit mitigations
+	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Virtualization" /v "IfuErrataMitigations" /t REG_DWORD /d "0" /f >nul
+	echo Disable ITLB Multi-hit mitigations
 	 Reg add HKCU\Software\CoutX /v DisableMitigationsgRan /t REG_DWORD /d 1 /f >nul
 ) || Reg query HKCU\Software\CoutX /v DisableMitigationsgRan 2>nul | find "0x1" >nul && (
 	::Reset Kernel Mitigations
@@ -485,7 +527,7 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	::Reset TsX
 	call :DelControlSet "Control\Session Manager\kernel" "DisableTsx"
 	
-	::Disable CPU Virtualization
+	::Reset CPU Virtualization
 	Reg delete "HKLM\Software\Policies\Microsoft\Windows\DeviceGuard" /v "EnableVirtualizationBasedSecurity" /f >nul 2>&1
 	bcdedit /deletevalue vsmlaunchtype >nul
 	bcdedit /deletevalue vm >nul
@@ -526,6 +568,9 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	if exist "%WinDir%\System32\mcupdate_AuthenticAMD.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_AuthenticAMD.dll.old mcupdate_AuthenticAMD.dll" >nul 2>&1
 	echo Reset Mitigations
 	
+	::Reset ITLB Multi-hit mitigations
+	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Virtualization" /v "IfuErrataMitigations" /t REG_DWORD /d "0" /f >nul
+	echo Reset ITLB Multi-hit mitigations
 	Reg delete HKCU\Software\CoutX /v DisableMitigationsgRan /f >nul
 )
 
@@ -650,17 +695,11 @@ Reg query HKCU\Software\CoutX /v DisableCPUThrottling 2>nul | find "0x1" >nul &&
 	::Configure C-States
 	powercfg -setacvalueindex scheme_current sub_processor IDLEPROMOTE 100 >nul
 	powercfg -setacvalueindex scheme_current sub_processor IDLEDEMOTE 100 >nul
-	powercfg -setacvalueindex scheme_current sub_processor IDLECHECK 20000 >nul
+	powercfg -setacvalueindex scheme_current sub_processor IDLECHECK 100000 >nul
 	powercfg -setacvalueindex scheme_current sub_processor IDLESCALING 0 >nul
 	::Apply Changes
 	powercfg -setactive scheme_current >nul
 	echo Disable Idle
-	
-	::Disable C1E
-	for /f "tokens=4 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EAX=%%a
-	for /f "tokens=3 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EDX=%%a
-	if "!EAX:~9,1!" equ "b" msr-cmd -a -s write 0x1FC[1] !EDX! !EAX:~0,9!9
-	echo Disable C1E
 
 	::Disable System Clock
 	bcdedit /set disabledynamictick yes >nul 2>&1
@@ -694,12 +733,6 @@ Reg query HKCU\Software\CoutX /v DisableCPUThrottling 2>nul | find "0x1" >nul &&
 	
 	 Reg add HKCU\Software\CoutX /v DisableCPUThrottlingRan /t REG_DWORD /d 1 /f >nul
 ) || Reg query HKCU\Software\CoutX /v DisableCPUThrottlingRan 2>nul | find "0x1" >nul && (
-	::Enable C1E
-	for /f "tokens=4 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EAX=%%a
-	for /f "tokens=3 skip=1" %%a in ('msr-cmd read 0x1FC[1]') do set EDX=%%a
-	if "!EAX:~9,1!" equ "9" msr-cmd -a -s write 0x1FC[1] !EDX! !EAX:~0,9!b
-	echo Enable C1E
-
 	::System Clock
 	bcdedit /deletevalue useplatformclock >nul 2>&1
 	bcdedit /deletevalue useplatformtick >nul 2>&1
