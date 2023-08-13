@@ -7,9 +7,6 @@ setlocal EnableDelayedExpansion
 ::MinSudo
 if not exist "MinSudo.exe" exit /b 1
 
-::MSR
-if not exist "msr-cmd.exe" exit /b 2
-
 ::NVProfileInspector
 if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" exit /b 3
 
