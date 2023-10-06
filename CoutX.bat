@@ -1,6 +1,6 @@
 @echo off
 cd %~dp0
-set version=1.4.0
+set version=2.0.0
 
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
