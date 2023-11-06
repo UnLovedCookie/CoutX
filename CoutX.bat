@@ -1,25 +1,18 @@
 @echo off
-cd %~dp0
-set version=2.0.2
+cd "%~dp0"
+set version=2.1.0
 
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
 
-::MinSudo
-if not exist "MinSudo.exe" exit /b 1
+::Timer Resolution
+if not exist "SetTimerResolution.exe" exit 1
 
 ::NVProfileInspector
-if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" exit /b 3
+if not exist "nvidiaProfileInspector\nvidiaProfileInspector.exe" exit 3
 
 ::Admin
-dism>nul || exit /b 4
-
-::Setup MinSudo
-sc query TrustedInstaller 2>nul | find "RUNNING" >nul || (
-MinSudo.exe --NoLogo --System Reg add "HKLM\System\CurrentControlSet\Services\TrustedInstaller" /v "Start" /t REG_DWORD /d "3" /f
-MinSudo.exe --NoLogo --System sc config "TrustedInstaller" start=demand
-MinSudo.exe --NoLogo --System sc start "TrustedInstaller"
-)
+dism>nul||exit 4
 
 ::Check GPU
 for /f "tokens=2 delims==" %%a in ('wmic path Win32_VideoController get VideoProcessor /value') do (
@@ -28,6 +21,10 @@ for %%n in (GeForce NVIDIA RTX GTX) do echo %%a | find /I "%%n" >nul && set GPU=
 
 ::Clear Nvidia Profile
 del /F /Q "nvidiaProfileInspector\CoutXProfile.nip" 2>nul
+
+::Enable Detailed BSOD
+Reg add "HKLM\SYSTEM\CurrentControlSet\Control\CrashControl" /v "DisplayParameters" /t REG_DWORD /d "1" /f >nul 2>&1
+echo Enable Detailed BSOD
 
 ::Remove Potential GameDVR and FSO Overrides
 Reg delete "HKLM\System\CurrentControlSet\Control\Session Manager\Environment" /v "__COMPAT_LAYER" /f >nul 2>&1
@@ -103,16 +100,17 @@ echo Animations
 Reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "DelayedDesktopSwitchTimeout" /t REG_DWORD /d "0" /f >nul
 Reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" /v "StartupDelayInMSec" /t REG_SZ /d "0" /f >nul
 if "%duelboot%" equ "no" (bcdedit /timeout 0) >nul
-bcdedit /set bootuxdisabled On >nul
-bcdedit /set bootmenupolicy Legacy >nul
+bcdedit /set bootuxdisabled on >nul
+bcdedit /set bootmenupolicy standard >nul
 bcdedit /set quietboot yes >nul
 echo Quick Boot
 
-::Quickly kill apps during shutdown
+::Quick Shutdown
+rem Quickly kill apps during shutdown
 Reg add "HKCU\Control Panel\Desktop" /v "WaitToKillAppTimeout" /t REG_SZ /d "2000" /f >nul
-::Quickly end services at shutdown
+rem Quickly end services at shutdown
 Reg add "HKLM\System\CurrentControlSet\Control" /v "WaitToKillServiceTimeout" /t REG_SZ /d "2000" /f >nul
-::Kill apps at shutdown
+rem Kill apps at shutdown
 Reg add "HKCU\Control Panel\Desktop" /v "AutoEndTasks" /t REG_SZ /d "1" /f >nul
 echo Quick Shutdown
 
@@ -123,17 +121,21 @@ Reg add "HKCU\Control Panel\Desktop" /v "MenuShowDelay" /t REG_SZ /d "20" /f >nu
 echo Speed-up Windows
 
 ::Disable Telemetry
-rem Bypass Windows 11 Checks
+rem Bypass Win11 Hardware Checks
 Reg add "HKLM\System\Setup\LabConfig" /v "BypassTPMCheck" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\System\Setup\LabConfig" /v "BypassRAMCheck" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\System\Setup\LabConfig" /v "BypassSecureBootCheck" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\System\Setup\MoSetup" /v "AllowUpgradesWithUnsupportedTPMOrCPU" /t REG_DWORD /d "1" /f >nul
+rem Bypass Win11 Telemetry Checks
+reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "BranchReadinessLevel" /t REG_DWORD /d 2 /f >nul
+reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "ManagePreviewBuilds" /t REG_DWORD /d 1 /f >nul
+reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "ManagePreviewBuildsPolicyValue" /t REG_DWORD /d 2 /f >nul
 rem Disable Inventory Collector
 Reg add "HKLM\Software\Policies\Microsoft\Windows\AppCompat" /v "DisableInventory" /t REG_DWORD /d "1" /f >nul
 rem Disable Windows Error Reporting
 Reg add "HKLM\Software\Policies\Microsoft\Windows\Windows Error Reporting" /v "Disabled" /t REG_DWORD /d "1" /f >nul
-Reg add "HKLM\System\CurrentControlSet\Services\WerSvc" /v "Start" /t REG_DWORD /d "3" /f >nul
-Reg add "HKLM\System\CurrentControlSet\Services\WecSvc" /v "Start" /t REG_DWORD /d "3" /f >nul
+sc config WerSvc start=disabled >nul
+sc config WecSvc start=disabled >nul
 rem Disable Application Telemetry
 Reg add "HKLM\Software\Policies\Microsoft\Windows\AppCompat" /v "AITEnable" /t REG_DWORD /d "0" /f >nul
 rem Disable the Customer Experience Improvement program (Below is 0 to disable)
@@ -165,8 +167,8 @@ Reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Diagnostics\DiagTrack\Tr
 Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Privacy" /v "TailoredExperiencesWithDiagnosticDataEnabled" /t REG_DWORD /d "0" /f >nul
 Reg add "HKCU\Software\Policies\Microsoft\Windows\CloudContent" /v "disabletailoredexperiencesWithDiagnosticData" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\Software\Policies\Microsoft\Windows\DataCollection" /v "DisableDiagnosticDataViewer" /T REG_DWORD /d "1" /f >nul
-Reg add "HKLM\System\CurrentControlSet\Services\DiagTrack" /v "Start" /t REG_DWORD /d "3" /f >nul
-Reg add "HKLM\System\CurrentControlSet\Services\DiagSvc" /v "Start" /t REG_DWORD /d "3" /f >nul
+sc config DiagTrack start=disabled >nul
+sc config DiagSvc start=disabled >nul
 rem Disable Text/Ink/Handwriting Telemetry
 reg add "HKCU\Software\Microsoft\Input\TIPC" /v Enabled /t REG_DWORD /d 0 /f >nul
 Reg add "HKLM\Software\Policies\Microsoft\InputPersonalization" /v "RestrictImplicitTextCollection" /t REG_DWORD /d "1" /f >nul
@@ -189,19 +191,30 @@ Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" 
 rem Disable Background Map Updates
 Reg add "HKLM\Software\Policies\Microsoft\Windows\Maps" /v "AutoDownloadAndUpdateMapData" /t REG_DWORD /d "0" /f >nul
 Reg add "HKLM\Software\Policies\Microsoft\Windows\Maps" /v "AllowUntriggeredNetworkTrafficOnSettingsPage" /t REG_DWORD /d "0" /f >nul
+sc config MapsBroker start=disabled >nul
 rem Disable Cortana
 Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v "CortanaEnabled" /t REG_DWORD /d "0" /f >nul
 Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v "CortanaConsent" /t REG_DWORD /d "0" /f >nul
 Reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Search" /v "AllowCortana" /t REG_DWORD /d "0" /f >nul
 rem Disable Biometrics
 Reg add "HKLM\Software\Policies\Microsoft\Biometrics" /v "Enabled" /t REG_DWORD /d "0" /f >nul
-Reg add "HKLM\System\CurrentControlSet\Services\WbioSrvc" /v "Start" /t REG_DWORD /d "3" /f >nul
+sc config WbioSrvc start=disabled >nul
 rem Disable .NET CLI Telemetry
 setx DOTNET_CLI_TELEMETRY_OPTOUT 1 >nul
+rem Disable Powershell Telemetry
+setx POWERSHELL_TELEMETRY_OPTOUT 1 >nul
 rem Disable Diagnostic Tracing
 call :ControlSet "Control\Diagnostics\Performance" "DisableDiagnosticTracing" "1" 2>nul
 rem Disable Key Management System Telemetry
 Reg add "HKLM\Software\Policies\Microsoft\Windows NT\CurrentVersion\Software Protection Platform" /v "NoGenTicket" /t REG_DWORD /d "1" /f >nul
+rem Disable Usage Statistics
+schtasks /change /tn "\Microsoft\Windows\Feedback\Siuf\DmClient" /disable >nul 2>&1
+rem Block Telemetry IPs
+cd %SystemRoot%\System32\drivers\etc
+if not exist hosts.bak ren hosts hosts.bak >nul 2>&1
+curl -l -s https://winhelp2002.mvps.org/hosts.txt -o hosts
+if not exist hosts ren hosts.bak hosts >nul 2>&1
+cd "%~dp0"
 echo Disable Telemetry
 
 ::Harden Windows
@@ -238,12 +251,16 @@ Reg add "HKLM\System\CurrentControlSet\Control\Remote Assistance" /v "fAllowToGe
 rem Set Strong Cryptography
 Reg add "HKLM\Software\Microsoft\.NetFramework\v4.0.30319" /v "SchUseStrongCrypto" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\Software\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" /v "SchUseStrongCrypto" /t REG_DWORD /d "1" /f >nul
+rem Mitigate CVE-2022-30190
+Reg delete HKEY_CLASSES_ROOT\ms-msdt /f >nul 2>&1
 echo Harden Windows
 
-::Enable xAPIC
+::Enable xAPIC on Windows Servers
+Reg query "HKLM\Software\Microsoft\Windows NT\CurrentVersion" /v "InstallationType" 2>nul | find /I "Server Core" >nul && (
 bcdedit /set x2apicpolicy enable >nul
 bcdedit /set uselegacyapicmode no >nul
 echo Enable xAPIC
+)
 
 ::Set SvcSplitThreshold
 for /f "tokens=2 delims==" %%n in ('wmic os get TotalVisibleMemorySize /format:value') do set mem=%%n
@@ -259,27 +276,38 @@ echo Enable PAE
 powershell -NoProfile -NonInteractive -ExecutionPolicy Unrestricted -Command ^
 $ErrorActionPreference = 'SilentlyContinue';^
 Disable-NetAdapterPowerManagement -Name "*";^
-Get-NetAdapter -IncludeHidden ^| Set-NetIPInterface -WeakHostSend Enabled -WeakHostReceive Enabled;^
 Set-NetOffloadGlobalSetting -PacketCoalescingFilter Disabled -Chimney Disabled;^
 Set-NetTCPSetting -SettingName "Internet" -MemoryPressureProtection Disabled
 echo Disable Network Power Savings And Mitigations
+
+::Enable Weak Host Model
+for /f "tokens=1" %%a in ('netsh interface ip show interface ^| findstr /I "connected"') do (
+netsh interface ipv6 set interface %%a weakhostreceive=enabled weakhostsend=enabled
+netsh interface ipv4 set interface %%a weakhostreceive=enabled weakhostsend=enabled
+) >nul
+echo Enable Weak Host Model
 
 ::Disable Delivery Optimization
 Reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Settings" /v "DownloadMode" /t REG_DWORD /d "0" /f >nul
 echo Disable Delivery Optimization
 
 ::Set Congestion Provider To BBR2
-netsh int tcp set supplemental template=Internet congestionprovider=bbr2 >nul
+netsh int tcp set global ecncapability=enabled >nul
+for /f "tokens=7" %%a in ('netsh int tcp show supplemental ^| findstr /I "template"') do netsh int tcp set supplemental %%a CongestionProvider=bbr2 >nul
 echo Set Congestion Provider To BBR2
 
 ::Disable Nagle's Algorithm
 Reg add "HKLM\Software\Microsoft\MSMQ\Parameters" /v "TCPNoDelay" /t REG_DWORD /d "1" /f >nul 2>&1  
 for /f "tokens=3*" %%i in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards" /f "ServiceName" /s ^|findstr /i /l "ServiceName"') do (
-		Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%%i" /v "TCPNoDelay" /t REG_DWORD /d "1" /f
-		Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%%i" /v "TcpAckFrequency" /t REG_DWORD /d "1" /f
-		Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%%i" /v "TcpDelAckTicks" /t REG_DWORD /d "0" /f
+	Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%%i" /v "TCPNoDelay" /t REG_DWORD /d "1" /f
+	Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%%i" /v "TcpAckFrequency" /t REG_DWORD /d "1" /f
+	Reg add "HKLM\System\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\%%i" /v "TcpDelAckTicks" /t REG_DWORD /d "0" /f
 ) >nul 2>&1
 echo Disable Nagle's Algorithm
+
+::Enable Winsock Autotuning
+netsh winsock set autotuning on >nul
+echo Enable Winsock Autotuning
 
 ::NIC
 mkdir "%SYSTEMDRIVE%\Backup" 2>nul
@@ -324,8 +352,8 @@ Reg add "%%g" /v "JumboPacket" /t REG_SZ /d "0" /f
 ::Interrupt Moderation Adaptive (Default)
 Reg add "%%g" /v "ITR" /t REG_SZ /d "125" /f
 ::Receive/Transmit Buffers
-Reg add "%%g" /v "ReceiveBuffers" /t REG_SZ /d "266" /f
-Reg add "%%g" /v "TransmitBuffers" /t REG_SZ /d "266" /f
+Reg delete "%%g" /v "ReceiveBuffers" /f
+Reg delete "%%g" /v "TransmitBuffers" /f
 ::Enable Throughput Booster
 Reg add "%%g" /v "ThroughputBoosterEnabled" /t REG_SZ /d "1" /f
 ::PnPCapabilities
@@ -394,6 +422,10 @@ Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProf
 Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" /v "Priority" /t REG_DWORD /d "8" /f >nul
 echo Configure MMCSS
 
+::Disable GPU Isolation
+reg add "HKLM\System\CurrentControlSet\Control\GraphicsDrivers" /v "IOMMUFlags" /t REG_DWORD /d 0 /f >nul
+echo Disable GPU Isolation
+
 ::Enable GPU MSI Mode
 for /f %%a in ('wmic path Win32_VideoController get PNPDeviceID ^| find "PCI\VEN_"') do ^
 reg query "HKLM\System\CurrentControlSet\Enum\%%a\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties" /v "MSISupported" >nul 2>&1 && (
@@ -411,6 +443,13 @@ echo Disable Background Apps
 call :ControlSet "Control\Power" "HibernateEnabled" "0"
 powercfg /h off >nul
 echo Disable Hibernation
+
+::Disable Sleep Study
+schtasks /change /tn "\microsoft\windows\power efficiency diagnostics\analyzesystem" /disable >nul 2>&1
+wevtutil set-log "Microsoft-Windows-SleepStudy/Diagnostic" /e:False >nul
+wevtutil set-log "Microsoft-Windows-Kernel-Processor-Power/Diagnostic" /e:False >nul
+wevtutil set-log "Microsoft-Windows-UserModePowerService/Diagnostic" /e:False >nul
+echo Disable Sleep Study
 
 ::Adjust processor scheduling to allocate processor resources to programs
 ::2A Hex/42 Dec = Short, Fixed, High foreground boost.
@@ -468,9 +507,8 @@ schtasks /change /disable /tn "NvTmRep_CrashReport3_{B2FE1952-0186-46C3-BAEC-A80
 schtasks /change /disable /tn "NvTmRep_CrashReport4_{B2FE1952-0186-46C3-BAEC-A80AA35AC5B8}" >nul 2>&1
 echo Disable Nvidia Telemetry
 
-::Grab Nvidia Graphics Card Registry Key
-for /f %%a in ('Reg query "HKLM\System\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" /t REG_SZ /s /e /f "NVIDIA" ^| findstr "HKEY"') do (
 ::Disable HDCP
+for /f %%a in ('Reg query "HKLM\System\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" /t REG_SZ /s /e /f "NVIDIA" ^| findstr "HKEY"') do ^
 if exist "C:\Program Files (x86)\Steam\steamapps\common\SteamVR" (
 call :DelControlSet "%%a" "RMHdcpKeyglobZero"
 echo Enable HDCP
@@ -480,7 +518,6 @@ echo Enable HDCP
 ) else (
 call :ControlSet "%%a" "RMHdcpKeyglobZero" "1"
 echo Disable HDCP
-)
 )
 
 ::NVCP Settings
@@ -582,7 +619,7 @@ echo CoutX Power Plan
 
 Reg query HKCU\Software\CoutX /v DisableDeviceThrottling 2>nul | find "0x1" >nul && (
 
-	::Disale NVMe Power Saving
+	::Disable NVMe Power Saving
 	rem NVMe Power State Transition Latency Tolerance: 0
 	powercfg -setacvalueindex scheme_current SUB_DISK dbc9e238-6de9-49e3-92cd-8c2b4946b472 0 >nul
 	powercfg -setacvalueindex scheme_current SUB_DISK fc95af4d-40e7-4b6d-835a-56d131dbc80e 0 >nul
@@ -591,7 +628,7 @@ Reg query HKCU\Software\CoutX /v DisableDeviceThrottling 2>nul | find "0x1" >nul
 	powercfg /setacvalueindex scheme_current SUB_DISK d639518a-e56d-4345-8af2-b9f32fb26109 0 >nul
 	rem NVME NOPPME: ON
 	powercfg /setacvalueindex scheme_current SUB_DISK DISKNVMENOPPME 1 >nul
-	echo Disale NVMe Power Saving
+	echo Disable NVMe Power Saving
 	
 	::Disable USB Power Savings
 	for /f "tokens=*" %%a in ('Reg query "HKLM\System\CurrentControlSet\Enum" /s /f "StorPort" 2^>nul ^| findstr "StorPort"') do call :ControlSet "%%a" "EnableIdlePowerManagement" "0"
@@ -619,7 +656,6 @@ Reg query HKCU\Software\CoutX /v DisableDeviceThrottling 2>nul | find "0x1" >nul
 	powercfg -setacvalueindex scheme_current SUB_DISK dab60367-53fe-4fbc-825e-521d069d2456 0 >nul
 	echo Disable Link State Power Management
 
-	
 	::Disable Storage Device Idle
 	Reg add "HKLM\System\CurrentControlSet\Services\stornvme\Parameters\Device" /v "IdlePowerMode" /t REG_DWORD /d "0" /f >nul
 	echo Disable Storage Device Idle
@@ -657,23 +693,18 @@ Reg query HKCU\Software\CoutX /v DisableDeviceThrottling 2>nul | find "0x1" >nul
 :::::::::::::::::::::::::::
 
 Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
-	::222222222222222222222222222222222222222222222222
 	::Disable Kernel Mitigations
-	for /f "tokens=3 skip=2" %%i in ('Reg query "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationAuditOptions"') do (
-	set "mitigation_mask=%%i"
+	for /f "tokens=3 skip=2" %%i in ('Reg query "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationAuditOptions"') do set mitigation_mask=%%i
 	for /l %%i in (0,1,9) do set mitigation_mask=!mitigation_mask:%%i=2!
-	)
-	Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationOptions" /t REG_BINARY /d "%mitigation_mask%" /f >nul
-	Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationAuditOptions" /t REG_BINARY /d "%mitigation_mask%" /f >nul
+	Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationOptions" /t REG_BINARY /d "!mitigation_mask!" /f >nul
+	Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\kernel" /v "MitigationAuditOptions" /t REG_BINARY /d "!mitigation_mask!" /f >nul
 	::Disable More Kernel Mitigations (Enforced Intel SGX causes boot crashes/loops)
-	echo %PROCESSOR_IDENTIFIER% | find /I "Intel" >nul || (
-	bcdedit /set allowedinmemorysettings 0x0 >nul
-	)
+	echo %PROCESSOR_IDENTIFIER% | find /I "Intel" >nul || bcdedit /set allowedinmemorysettings 0x0 >nul
 	echo Disable Kernel Mitigations
 	
 	::Disable CSRSS mitigations
-	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe" /v MitigationAuditOptions /t REG_BINARY /d "%mitigation_mask%" /f >nul
-	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe" /v MitigationOptions /t REG_BINARY /d "%mitigation_mask%" /f >nul
+	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe" /v MitigationAuditOptions /t REG_BINARY /d "!mitigation_mask!" /f >nul
+	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\csrss.exe" /v MitigationOptions /t REG_BINARY /d "!mitigation_mask!" /f >nul
 	echo Disable CSRSS mitigations
 	
 	::Disable Process Mitigations
@@ -692,6 +723,7 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	
 	::Disable VBS
 	call :ControlSet "Control\DeviceGuard" "EnableVirtualizationBasedSecurity" "0"
+	bcdedit /set loadoptions "DISABLE-LSA-ISO,DISABLE-VBS" >nul
 	bcdedit /set isolatedcontext No >nul
 	echo Disable VBS
 	
@@ -731,15 +763,24 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettings" "3"
 	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverride" "3"
 	call :ControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" "3"
-	takeown /f "C:\Windows\System32\mcupdate_GenuineIntel.dll" /r /d y >nul 2>&1
-	takeown /f "C:\Windows\System32\mcupdate_AuthenticAMD.dll" /r /d y >nul 2>&1
-	if exist "%WinDir%\System32\mcupdate_GenuineIntel.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_GenuineIntel.dll mcupdate_GenuineIntel.dll.old"
-	if exist "%WinDir%\System32\mcupdate_AuthenticAMD.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_AuthenticAMD.dll mcupdate_AuthenticAMD.dll.old"
+	rem Disabling Microcode Mitigations on Windows 24H2 Causes BSOD
+	for /f "tokens=4-9 delims=. " %%i in ('ver') do if %%k lss 25967 (
+		takeown /f "C:\Windows\System32\mcupdate_GenuineIntel.dll" /r /d y >nul 2>&1
+		takeown /f "C:\Windows\System32\mcupdate_AuthenticAMD.dll" /r /d y >nul 2>&1
+		ren %WinDir%\System32\mcupdate_GenuineIntel.dll mcupdate_GenuineIntel.dll.old 2>nul
+		ren %WinDir%\System32\mcupdate_AuthenticAMD.dll mcupdate_AuthenticAMD.dll.old 2>nul
+	)
 	echo Disable Spectre And Meltdown
 	
 	::Disable ITLB Multi-hit mitigations
 	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Virtualization" /v "IfuErrataMitigations" /t REG_DWORD /d "0" /f >nul
 	echo Disable ITLB Multi-hit mitigations
+	
+	::Disable FTH
+	Reg add HKLM\Software\Microsoft\FTH /v Enabled /t REG_DWORD /d 0 /f >nul
+	rundll32.exe fthsvc.dll,FthSysprepSpecialize
+	echo Disable FTH
+	
 	 Reg add HKCU\Software\CoutX /v DisableMitigationsgRan /t REG_DWORD /d 1 /f >nul
 ) || Reg query HKCU\Software\CoutX /v DisableMitigationsgRan 2>nul | find "0x1" >nul && (
 	::Reset Kernel Mitigations
@@ -765,6 +806,7 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	
 	::Reset VBS
 	call :DelControlSet "Control\DeviceGuard" "EnableVirtualizationBasedSecurity"
+	bcdedit /deletevalue loadoptions >nul
 	bcdedit /deletevalue isolatedcontext >nul
 	
 	::Reset Memory Integrity
@@ -798,13 +840,19 @@ Reg query HKCU\Software\CoutX /v DisableMitigations 2>nul | find "0x1" >nul && (
 	call :DelControlSet "Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask"
 	takeown /f "C:\Windows\System32\mcupdate_GenuineIntel.dll.old" /r /d y >nul 2>&1
 	takeown /f "C:\Windows\System32\mcupdate_AuthenticAMD.dll.old" /r /d y >nul 2>&1
-	if exist "%WinDir%\System32\mcupdate_GenuineIntel.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_GenuineIntel.dll.old mcupdate_GenuineIntel.dll" >nul 2>&1
-	if exist "%WinDir%\System32\mcupdate_AuthenticAMD.dll" MinSudo.exe --TrustedInstaller --Privileged cmd /c "ren %WinDir%\System32\mcupdate_AuthenticAMD.dll.old mcupdate_AuthenticAMD.dll" >nul 2>&1
+	ren %WinDir%\System32\mcupdate_GenuineIntel.dll.old mcupdate_GenuineIntel.dll
+	ren %WinDir%\System32\mcupdate_AuthenticAMD.dll.old mcupdate_AuthenticAMD.dll
 	echo Reset Mitigations
 	
 	::Reset ITLB Multi-hit mitigations
 	Reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Virtualization" /v "IfuErrataMitigations" /t REG_DWORD /d "0" /f >nul
 	echo Reset ITLB Multi-hit mitigations
+	
+	::Reset FTH
+	Reg delete HKLM\Software\Microsoft\FTH /v Enabled /f >nul
+	rundll32.exe fthsvc.dll,FthSysprepSpecialize
+	echo Reset FTH
+	
 	Reg delete HKCU\Software\CoutX /v DisableMitigationsgRan /f >nul
 )
 
@@ -827,10 +875,9 @@ Reg query HKCU\Software\CoutX /v DisableGPUThrottling 2>nul | find "0x1" >nul &&
 	::Disable GpuEnergyDrv
 	call :ControlSet "Services\GpuEnergyDrv" "Start" "4"
 	echo Disable GpuEnergyDrv
-
 	::Grab Nvidia Graphics Card Registry Key
-	::Disable Dynamic PStates
 	for /f %%a in ('Reg query "HKLM\System\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" /t REG_SZ /s /e /f "NVIDIA" ^| findstr "HKEY"') do (
+	::Disable Dynamic PStates
 	reg query "%%a" /v "DisableDynamicPState" >nul 2>&1 && (
 	Call :ControlSet "%%a" "DisableDynamicPState" "1"
 	echo Disable Dynamic PStates
@@ -847,7 +894,7 @@ Reg query HKCU\Software\CoutX /v DisableGPUThrottling 2>nul | find "0x1" >nul &&
 	Call :ControlSet "%%a" "EnableNVClkSlowdown" "0"
 	echo Disable Overheat Slowdown
 	)
-	
+
 	::Grab iGPU Registry Key
 	for /f %%i in ('Reg query "HKLM\System\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}" /t REG_SZ /s /e /f "Intel" ^| findstr "HKEY"') do (
 	::Disable iGPU CStates
@@ -948,10 +995,10 @@ Reg query HKCU\Software\CoutX /v DisableCPUThrottling 2>nul | find "0x1" >nul &&
 	Reg add "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "TimerResolution" /t REG_DWORD /d "1" /f >nul 2>&1
 	echo QoS TimerResolution
 	
-	::Disable the Processor Power Management Driver
+	::Disable The Processor Power Management Driver
 	call :ControlSet "Services\IntelPPM" "Start" "4"
 	call :ControlSet "Services\AmdPPM" "Start" "4"
-	echo Disable the Processor Power Management Driver
+	echo Disable The Processor Power Management Driver
 	
 	 Reg add HKCU\Software\CoutX /v DisableCPUThrottlingRan /t REG_DWORD /d 1 /f >nul
 ) || Reg query HKCU\Software\CoutX /v DisableCPUThrottlingRan 2>nul | find "0x1" >nul && (
@@ -971,10 +1018,10 @@ Reg query HKCU\Software\CoutX /v DisableCPUThrottling 2>nul | find "0x1" >nul &&
 	Reg delete "HKLM\Software\Policies\Microsoft\Windows\Psched" /v "TimerResolution" /f >nul 2>&1
 	echo Reset QoS TimerResolution
 
-	::Enable the Processor Power Management Driver
+	::Enable The Processor Power Management Driver
 	call :ControlSet "Services\IntelPPM" "Start" "2"
 	call :ControlSet "Services\AmdPPM" "Start" "2"
-	echo Enable the Processor Power Management Driver
+	echo Enable The Processor Power Management Driver
 
 	Reg delete HKCU\Software\CoutX /v DisableCPUThrottlingRan /f >nul
 )
@@ -1000,8 +1047,7 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	echo Disable Large System Cache
 
 	::Disable Prefetch
-	sc config "SysMain" start=disabled >nul
-	sc stop "SysMain" >nul
+	sc stop "SysMain" & sc config "SysMain" start=disabled
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnablePrefetcher" "0"
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableSuperfetch" "0"
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableBoottrace" "0"
@@ -1013,8 +1059,7 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	
 	 Reg add HKCU\Software\CoutX /v ExTweaksRan /t REG_DWORD /d 1 /f >nul
 ) || Reg query HKCU\Software\CoutX /v ExTweaksRan 2>nul | find "0x1" >nul && (
-	sc config "SysMain" start=auto >nul
-	sc start "SysMain" >nul
+	sc config "SysMain" start=auto & sc start "SysMain"
 	call :DelControlSet "Control\Session Manager\Memory Management" "DisablePagingExecutive"
 	call :DelControlSet "Control\Session Manager\Memory Management" "DisablePageCombining"
 	call :DelControlSet "Control\Session Manager\Memory Management" "LargeSystemCache"
