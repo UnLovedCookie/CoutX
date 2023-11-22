@@ -1,6 +1,6 @@
 @echo off
 cd "%~dp0"
-set version=2.1.0
+set version=2.1.1
 
 ::Enable Delayed Expansion
 setlocal EnableDelayedExpansion
@@ -99,7 +99,7 @@ echo Animations
 ::Quick Boot
 Reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "DelayedDesktopSwitchTimeout" /t REG_DWORD /d "0" /f >nul
 Reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" /v "StartupDelayInMSec" /t REG_SZ /d "0" /f >nul
-if "%duelboot%" equ "no" (bcdedit /timeout 0) >nul
+Reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" /v "RunStartupScriptSync" /t REG_DWORD /d "0" /f >nul
 bcdedit /set bootuxdisabled on >nul
 bcdedit /set bootmenupolicy standard >nul
 bcdedit /set quietboot yes >nul
@@ -121,15 +121,12 @@ Reg add "HKCU\Control Panel\Desktop" /v "MenuShowDelay" /t REG_SZ /d "20" /f >nu
 echo Speed-up Windows
 
 ::Disable Telemetry
-rem Bypass Win11 Hardware Checks
+rem Bypass Win11 Checks
 Reg add "HKLM\System\Setup\LabConfig" /v "BypassTPMCheck" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\System\Setup\LabConfig" /v "BypassRAMCheck" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\System\Setup\LabConfig" /v "BypassSecureBootCheck" /t REG_DWORD /d "1" /f >nul
 Reg add "HKLM\System\Setup\MoSetup" /v "AllowUpgradesWithUnsupportedTPMOrCPU" /t REG_DWORD /d "1" /f >nul
-rem Bypass Win11 Telemetry Checks
 reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "BranchReadinessLevel" /t REG_DWORD /d 2 /f >nul
-reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "ManagePreviewBuilds" /t REG_DWORD /d 1 /f >nul
-reg add "HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate" /v "ManagePreviewBuildsPolicyValue" /t REG_DWORD /d 2 /f >nul
 rem Disable Inventory Collector
 Reg add "HKLM\Software\Policies\Microsoft\Windows\AppCompat" /v "DisableInventory" /t REG_DWORD /d "1" /f >nul
 rem Disable Windows Error Reporting
@@ -218,6 +215,9 @@ cd "%~dp0"
 echo Disable Telemetry
 
 ::Harden Windows
+rem Disable SMBv1 and SMBv2 as it's outdated and vulnerable to exploitation.
+Reg add "HKLM\System\CurrentControlSet\Services\LanmanServer\Parameters" /v "SMB1" /t REG_DWORD /d "0" /f >nul
+Reg add "HKLM\System\CurrentControlSet\Services\LanmanServer\Parameters" /v "SMB2" /t REG_DWORD /d "0" /f >nul
 rem Block Anonymous Enumeration of SAM Accounts
 rem https://www.stigviewer.com/stig/windows_10/2021-03-10/finding/V-220929
 Reg add "HKLM\System\CurrentControlSet\Control\Lsa" /v "RestrictAnonymous" /t REG_DWORD /d "1" /f >nul
@@ -262,11 +262,18 @@ bcdedit /set uselegacyapicmode no >nul
 echo Enable xAPIC
 )
 
-::Set SvcSplitThreshold
+::SvcSplitThreshold
 for /f "tokens=2 delims==" %%n in ('wmic os get TotalVisibleMemorySize /format:value') do set mem=%%n
-set /a ram=!mem! + 1024000
-call :ControlSet "Control" "SvcHostSplitThresholdInKB" "!ram!"
-echo Set SvcSplitThreshold
+call :ControlSet "Control" "SvcHostSplitThresholdInKB" "%mem%"
+echo SvcSplitThreshold
+
+::IOPageLockLimit
+Reg add "HKLM\System\CurrentControlSet\Control\Session Manager\Memory Management" /v "IOPageLockLimit" /t REG_DWORD /d "%mem%" /f >nul
+echo IOPageLockLimit
+
+::Increase Decommitting Memory Threshold
+Reg add "HKLM\System\CurrentControlSet\Control\Session Manager" /v "HeapDeCommitFreeBlockThreshold" /t REG_DWORD /d "262144" /f >nul
+echo Increase Decommitting Memory Threshold
 
 ::Enable PAE
 bcdedit /set pae ForceEnable >nul
@@ -492,8 +499,8 @@ call :ControlSet "Control\FileSystem" "NtfsDisableLastAccessUpdate" "2147483649"
 
 ::Opt out of nvidia telemetry
 call :ControlSet "Services\NvTelemetryContainer" "Start" "4"
-sc config NvTelemetyContainer start=disabled >nul
 sc stop NvTelemetyContainer >nul
+sc config NvTelemetyContainer start=disabled >nul
 if exist "%systmedrive%\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL" (rundll32 "%systmedrive%\Program Files\NVIDIA Corporation\Installer2\InstallerCore\NVI2.DLL",UninstallPackage NvTelemetryContainer)
 Reg add "HKLM\Software\NVIDIA Corporation\NvControlPanel2\Client" /v "OptInOrOutPreference" /t REG_DWORD /d 0 /f >nul
 Reg add "HKLM\System\CurrentControlSet\Services\nvlddmkm\Global\Startup" /v "SendTelemetryData" /t REG_DWORD /d "0" /f >nul
@@ -1051,6 +1058,7 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnablePrefetcher" "0"
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableSuperfetch" "0"
 	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableBoottrace" "0"
+	call :ControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "SfTracingState" "0"
 	echo Disable Prefetch
 
 	::Disable Preemption
@@ -1066,6 +1074,7 @@ Reg query HKCU\Software\CoutX /v ExTweaks 2>nul | find "0x1" >nul && (
 	call :DelControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnablePrefetcher"
 	call :DelControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableSuperfetch"
 	call :DelControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "EnableBoottrace"
+	call :DelControlSet "Control\Session Manager\Memory Management\PrefetchParameters" "SfTracingState"
 	call :DelControlSet "Control\GraphicsDrivers\Scheduler" "EnablePreemption"
 	Reg delete HKCU\Software\CoutX /v ExTweaksRan /f >nul
 )
